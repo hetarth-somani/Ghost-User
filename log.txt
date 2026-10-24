@@ -117,3 +117,118 @@ branch=main
 repo_root=c:\Users\hetar\OneDrive\Documents\Projects\hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
+
+
+
+## [2026-10-25T02:02:02+05:30] Complete diagnostics and code fixes for zero-API / rapid pipeline bug
+
+User Prompt (verbatim, secrets redacted):
+You are debugging a Python deletion-audit pipeline. The symptom: `python -m src.pipeline` completed in under 1 minute with NO Groq API calls visible in the dashboard. [10 read-only diagnostics to run and paste, fixes A-F to apply to src/ and config/ without running the pipeline, and DEBUG_NOTES.md to produce].
+
+Agent Response Summary:
+Ran all 10 diagnostics strictly read-only and captured the exact outputs. Identified that the root cause was `records: 0` in cache/evidence_index.sqlite (silent regex ingestion failure for SQL/records) plus an empty ocr_cache and lexicographical case sorting. Applied all requested code fixes statically to src/ingest.py, src/pipeline.py, src/ocr.py without running the pipeline, writing output.csv, or modifying evaluation/. Created DEBUG_NOTES.md summarizing root cause, counts, diffs, and next steps for the user.
+
+Actions:
+* Ran diagnostic queries on output.csv, evidence_index.sqlite, ocr_cache.sqlite, llm_cache.sqlite, deletion_requests.csv, and classify.py
+* Edited src/ingest.py to use in-memory sqlite3.executescript for all SQL snapshot files
+* Edited src/pipeline.py to add --output/--twice/--diff flags, startup guards, and natural integer sort
+* Edited src/ocr.py to add OCR sha256 caching and Groq vision fallback
+* Created DEBUG_NOTES.md
+
+Context:
+tool=Antigravity
+model=Gemini 3.8 Flash (Medium)
+branch=main
+repo_root=c:\Users\hetar\OneDrive\Documents\Projects\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-25T02:18:31+05:30] Investigate defects D1-D8 and propose minimal diffs in DEBUG_NOTES.md
+
+User Prompt (verbatim, secrets redacted):
+The output.csv on disk has multiple defects that indicate a broken pipeline. Your job is to find the root cause of EACH defect below via code inspection and SQLite queries. Do NOT patch until you have evidence for each root cause. [Defect diagnostics D1 through D8, code inspection, output counts, and root cause reporting].
+
+Agent Response Summary:
+Conducted systematic diagnostic checks across D1 through D8 strictly read-only: measured the false-negative classification rate in D1 (227 cases wrongly rejected due to rigid substring matching, verified that regex stems reduce it to the exact 10 non-deletion cases); confirmed 94 COMPLETE cases with empty steps in D2; discovered activity-to-category misclassification for audit records in D3; confirmed tombstone deletion bug in D4; identified unconditioned verification emission in D5; traced activity selection blindness in D6; analyzed evidence attribution collisions in D7; and identified missing PDF/PNG/TXT/JSON ingestion branches in D8. Formulated root causes and minimal diff proposals in DEBUG_NOTES.md without patching code, running pipeline, or touching evaluation files.
+
+Actions:
+* Ran diagnostic queries for D1, D2, D3, D4, D5, D6, D7, and D8
+* Inspected src/classify.py, src/steps.py, src/rules.py, src/inventory.py, src/timeline.py, and src/ingest.py
+* Updated DEBUG_NOTES.md with root cause analyses, line references, and proposed diffs
+
+Context:
+tool=Antigravity
+model=Gemini 3.8 Flash (Medium)
+branch=main
+repo_root=c:\Users\hetar\OneDrive\Documents\Projects\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-25T02:24:25+05:30] Apply fixes for defects D1 through D8 in src/
+
+User Prompt (verbatim, secrets redacted):
+okay then apply the changes accordingly
+
+Agent Response Summary:
+Applied targeted, surgical code fixes across the identified source files without running the pipeline, without modifying output.csv, and without touching evaluation/. Fixed D1 in src/classify.py using regex stem matching (verified unit test: exact 10 non-deletion cases); fixed D3 and D4 in src/inventory.py and src/rules.py to properly categorize security audit logs and key tombstones by resource prefix; fixed D5 and D2 in src/steps.py to eliminate orphaned verification steps and prevent empty verification lists in COMPLETE cases; fixed D6 and D7 in src/timeline.py and src/inventory.py to match resource-keyed activities and prioritize specific evidence citations; and fixed D8 in src/ocr.py and src/ingest.py by adding nested snapshot bundle unwrapping, pipe-delimited handover parsing, and pypdf/tesseract-CLI extraction fallbacks.
+
+Actions:
+* Modified src/classify.py (stem-based positive regex patterns)
+* Modified src/inventory.py (activity category classification and evidence priority)
+* Modified src/rules.py (security audit log retention exemption and tombstone prefix matching)
+* Modified src/steps.py (conditioned verification steps and non-empty COMPLETE guarantee)
+* Modified src/timeline.py (activity matching by resource_ids as well as user details)
+* Modified src/ocr.py (pypdf and subprocess tesseract fallbacks)
+* Modified src/ingest.py (nested snapshots bundle parsing and handover text table extraction)
+
+Context:
+tool=Antigravity
+model=Gemini 3.8 Flash (Medium)
+branch=main
+repo_root=c:\Users\hetar\OneDrive\Documents\Projects\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-25T02:48:37+05:30] Fix legal hold retention (Fix A), tombstone categorization (Fix B), and eliminate record_system fabrication (Fix C)
+
+User Prompt (verbatim, secrets redacted):
+Three bugs confirmed in output.csv. Fix A and B in code. Diagnose C. [Fix A: Legal hold retention rule_13, Fix B: account_service tombstone rule_15, Diagnose C: record_system inspection and diff].
+
+Agent Response Summary:
+Inspected the three issues without running the pipeline or touching output.csv or evaluation/. For Fix A, updated src/rules.py to treat LEGAL_HOLD_RECORD and legal_hold_* as retained compliant records (exempt from VIOLATION_REMAINING) and updated src/steps.py to emit VERIFY_RECORD_PRESENT. For Fix B, widened tombstone categorization in src/inventory.py to key off resource_id prefix 'tombstone_' regardless of system_id, and ensured src/steps.py emits VERIFY_RECORD_REDACTED. For Diagnose C, proved that 'record_system' is an artificial fallback literal in src/ingest.py:279 when parsing connector_configurations and customer_export_manifest (which actually store the system name under key 'system', e.g. integration_service, backup_service, account_service). Replaced the fallback with exact key extraction and prefix mapping with a hard ValueError failure if unresolvable.
+
+Actions:
+* Ran Diagnose C queries (SQLite records, file grep, evidence_files.csv check)
+* Edited src/rules.py and src/steps.py for Fix A (legal hold retention)
+* Edited src/inventory.py and src/steps.py for Fix B (tombstone categorization)
+* Edited src/ingest.py for Fix C (replacing record_system fallback with true system extraction)
+* Verified all fixes via isolated unit tests
+
+Context:
+tool=Antigravity
+model=Gemini 3.8 Flash (Medium)
+branch=main
+repo_root=c:\Users\hetar\OneDrive\Documents\Projects\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-25T03:04:20+05:30] Add internal debug notes and scratch artifacts to .gitignore
+
+User Prompt (verbatim, secrets redacted):
+now I want ti push my clean code toi my repo for whihc I want you to put excess foiles in the gitignore such as Debug_notes.md etc.
+
+Agent Response Summary:
+Updated .gitignore to explicitly exclude excess internal development files such as DEBUG_NOTES.md, debug_notes.md, scratch/, and backup files (*.bak), keeping the repository clean for pushing while preserving all solution source files, configs, and required submission artifacts. Verified via git status that DEBUG_NOTES.md is now properly ignored.
+
+Actions:
+* Checked git status
+* Updated .gitignore with patterns for DEBUG_NOTES.md, *.bak, and scratch/
+* Verified git status confirming DEBUG_NOTES.md is ignored
+
+Context:
+tool=Antigravity
+model=Gemini 3.8 Flash (Medium)
+branch=main
+repo_root=c:\Users\hetar\OneDrive\Documents\Projects\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none

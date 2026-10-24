@@ -46,6 +46,12 @@ cache/
 *.sqlite3
 *.db
 
+# Intermediate debugging & internal notes
+DEBUG_NOTES.md
+debug_notes.md
+*.bak
+scratch/
+
 # Temporary & intermediate evaluation/prediction files
 sample_output_pred.csv
 sample_pred.csv

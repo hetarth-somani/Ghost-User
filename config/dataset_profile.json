@@ -1,0 +1,234 @@
+{
+  "csv_metrics": {
+    "deletion_requests.csv": {
+      "row_count": 518,
+      "columns": [
+        "case_id",
+        "email",
+        "requested_at",
+        "reported_status",
+        "reported_at",
+        "audit_at",
+        "request_text"
+      ]
+    },
+    "sample_deletion_requests.csv": {
+      "row_count": 32,
+      "columns": [
+        "case_id",
+        "email",
+        "requested_at",
+        "reported_status",
+        "reported_at",
+        "audit_at",
+        "request_text"
+      ]
+    },
+    "sample_output.csv": {
+      "row_count": 32,
+      "columns": [
+        "case_id",
+        "deletion_status",
+        "steps_json"
+      ]
+    },
+    "user_identities.csv": {
+      "row_count": 850,
+      "columns": [
+        "user_id",
+        "name",
+        "email",
+        "phone",
+        "email_hash",
+        "updated_at"
+      ]
+    },
+    "user_audit_log.csv": {
+      "row_count": 306,
+      "columns": [
+        "audit_id",
+        "user_id",
+        "event_time",
+        "field_name",
+        "old_value",
+        "new_value"
+      ]
+    },
+    "system_activity.csv": {
+      "row_count": 4011,
+      "columns": [
+        "activity_id",
+        "event_time",
+        "event_type",
+        "source_system",
+        "target_system",
+        "resource_id",
+        "reported_result",
+        "details"
+      ]
+    },
+    "deletion_rules.csv": {
+      "row_count": 15,
+      "columns": [
+        "rule_id",
+        "data_category",
+        "condition",
+        "required_action"
+      ]
+    },
+    "evidence_files.csv": {
+      "row_count": 94,
+      "columns": [
+        "file_id",
+        "file_path",
+        "origin",
+        "captured_at"
+      ]
+    }
+  },
+  "deletion_rules": {
+    "USER_PROFILE": {
+      "rule_id": "rule_01",
+      "condition": "Always",
+      "required_action": "DELETE"
+    },
+    "SECONDARY_IDENTIFIER": {
+      "rule_id": "rule_02",
+      "condition": "Always",
+      "required_action": "DELETE"
+    },
+    "SEARCH_INDEX_ENTRY": {
+      "rule_id": "rule_03",
+      "condition": "Always",
+      "required_action": "DELETE"
+    },
+    "CACHE_ENTRY": {
+      "rule_id": "rule_04",
+      "condition": "Always",
+      "required_action": "DELETE"
+    },
+    "SUPPORT_MESSAGE": {
+      "rule_id": "rule_05",
+      "condition": "Conversation contains shared customer, agent, or order context that must be retained",
+      "required_action": "REDACT"
+    },
+    "SUPPORT_ATTACHMENT": {
+      "rule_id": "rule_06",
+      "condition": "Attachment belongs only to the deletion subject",
+      "required_action": "DELETE"
+    },
+    "ANALYTICS_PROFILE": {
+      "rule_id": "rule_07",
+      "condition": "Record is still attributable to a user",
+      "required_action": "ANONYMIZE"
+    },
+    "PRODUCT_TELEMETRY": {
+      "rule_id": "rule_08",
+      "condition": "Record is still attributable to a user",
+      "required_action": "ANONYMIZE"
+    },
+    "USER_EXPORT": {
+      "rule_id": "rule_09",
+      "condition": "Always",
+      "required_action": "DELETE"
+    },
+    "MARKETING_PROFILE": {
+      "rule_id": "rule_10",
+      "condition": "Always",
+      "required_action": "DELETE"
+    },
+    "EMAIL_DELIVERY_LOG": {
+      "rule_id": "rule_11",
+      "condition": "Log contains a user email address",
+      "required_action": "REDACT"
+    },
+    "SECURITY_AUDIT_LOG": {
+      "rule_id": "rule_12",
+      "condition": "Record is within the supplied retention period",
+      "required_action": "RETAIN"
+    },
+    "LEGAL_HOLD_RECORD": {
+      "rule_id": "rule_13",
+      "condition": "A supplied legal hold is active",
+      "required_action": "RETAIN"
+    },
+    "BACKUP_ARCHIVE": {
+      "rule_id": "rule_14",
+      "condition": "Restore access can be blocked",
+      "required_action": "RETAIN"
+    },
+    "ACCOUNT_TOMBSTONE": {
+      "rule_id": "rule_15",
+      "condition": "Account is deleted and only a stable internal user_id is needed to preserve references to retained records",
+      "required_action": "REDACT"
+    }
+  },
+  "evidence_manifest_count": 94,
+  "actual_evidence_count": 94,
+  "modality_distribution": {
+    ".sql": 24,
+    ".pdf": 4,
+    ".png": 11,
+    ".log": 26,
+    ".json": 28,
+    ".txt": 1
+  },
+  "manifest_matches_disk": true,
+  "sample_conventions": {
+    "status_distribution": {
+      "COMPLETE": 10,
+      "INCOMPLETE": 22
+    },
+    "system_ids": [
+      "account_service",
+      "analytics_platform",
+      "backup_service",
+      "export_service",
+      "identity_service",
+      "integration_service",
+      "search_service",
+      "security_service",
+      "support_platform"
+    ],
+    "resource_prefixes": [
+      "account",
+      "analytics",
+      "audit",
+      "backup",
+      "data",
+      "export",
+      "search",
+      "support",
+      "tombstone"
+    ],
+    "operations": [
+      "ANONYMIZE_RECORD",
+      "BLOCK_RESTORE",
+      "DELETE_RECORD",
+      "DISABLE_DATA_FLOW",
+      "REDACT_RECORD",
+      "REPORT_ACTIVE_DATA_FLOW",
+      "REPORT_EXPOSED_PII",
+      "REPORT_REMAINING_RECORD",
+      "REPORT_RESTORE_RISK",
+      "VERIFY_DATA_FLOW_DISABLED",
+      "VERIFY_RECORD_ABSENT",
+      "VERIFY_RECORD_ANONYMIZED",
+      "VERIFY_RECORD_PRESENT",
+      "VERIFY_RECORD_REDACTED",
+      "VERIFY_RESTORE_BLOCKED"
+    ]
+  },
+  "detected_non_deletion_cases": [
+    "case_533",
+    "case_534",
+    "case_535",
+    "case_536",
+    "case_537",
+    "case_538",
+    "case_539",
+    "case_540",
+    "case_541",
+    "case_542"
+  ]
+}

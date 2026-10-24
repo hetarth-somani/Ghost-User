@@ -78,8 +78,17 @@ class InventoryBuilder:
                         if v and any(p in str(v) for p in bundle.phones):
                             remaining.add("phone")
 
-                    # Map system to category if not specific
-                    if cat in ["OBSERVED_EXPORT", "SNAPSHOT_RECORD", "DOCUMENT_OBSERVATION"]:
+                    # Map system to category if not specific, prioritizing resource_id prefix
+                    if res_id.startswith("tombstone_"):
+                        cat = "ACCOUNT_TOMBSTONE"
+                        sys_id = "identity_service"
+                    elif res_id.startswith("legal_hold_"):
+                        cat = "LEGAL_HOLD_RECORD"
+                        sys_id = "legal_service"
+                    elif "audit_record" in res_id or sys_id == "security_service":
+                        cat = "SECURITY_AUDIT_LOG"
+                        sys_id = "security_service"
+                    elif cat in ["OBSERVED_EXPORT", "SNAPSHOT_RECORD", "DOCUMENT_OBSERVATION"]:
                         sys_cat_map = {
                             "account_service": "USER_PROFILE",
                             "search_service": "SEARCH_INDEX_ENTRY",
@@ -90,6 +99,7 @@ class InventoryBuilder:
                             "identity_service": "ACCOUNT_TOMBSTONE",
                             "integration_service": "CACHE_ENTRY",
                             "backup_service": "BACKUP_ARCHIVE",
+                            "legal_service": "LEGAL_HOLD_RECORD",
                         }
                         cat = sys_cat_map.get(sys_id, cat)
 
@@ -114,8 +124,12 @@ class InventoryBuilder:
                         res = resources_map[key]
                         res.state_at_audit_at = state
                         res.identifiers_remaining = remaining
+                        # Place specific evidence (like logs, dumps) ahead of generic exports
                         if ev_id not in res.evidence_ids:
-                            res.evidence_ids.append(ev_id)
+                            if "log" in ev_id or "sql" in ev_id:
+                                res.evidence_ids.insert(0, ev_id)
+                            else:
+                                res.evidence_ids.append(ev_id)
 
         # 2. Add resources from timeline activities (flows, backup checks)
         for ev in events:
@@ -136,7 +150,29 @@ class InventoryBuilder:
                     state = "ACTIVE"
 
                 if key not in resources_map:
-                    cat = "BACKUP_ARCHIVE" if is_backup else "CACHE_ENTRY" if is_flow else "USER_PROFILE"
+                    is_audit = "audit_record" in ev.resource_id or sys_id == "security_service"
+                    is_tombstone = ev.resource_id.startswith("tombstone_") or sys_id == "identity_service"
+                    is_support = ev.resource_id.startswith("support_") or sys_id == "support_platform"
+                    is_search = ev.resource_id.startswith("search_") or sys_id == "search_service"
+                    is_analytics = ev.resource_id.startswith("analytics_") or sys_id == "analytics_platform"
+
+                    if is_backup:
+                        cat = "BACKUP_ARCHIVE"
+                    elif is_flow:
+                        cat = "CACHE_ENTRY"
+                    elif is_audit:
+                        cat = "SECURITY_AUDIT_LOG"
+                    elif is_tombstone:
+                        cat = "ACCOUNT_TOMBSTONE"
+                    elif is_support:
+                        cat = "SUPPORT_MESSAGE"
+                    elif is_search:
+                        cat = "SEARCH_INDEX_ENTRY"
+                    elif is_analytics:
+                        cat = "ANALYTICS_PROFILE"
+                    else:
+                        cat = "USER_PROFILE"
+
                     resources_map[key] = Resource(
                         system_id=sys_id,
                         resource_id=ev.resource_id,
@@ -146,7 +182,7 @@ class InventoryBuilder:
                         evidence_ids=[ev.evidence_id],
                         is_data_flow=is_flow,
                         is_restore_risk=is_backup,
-                        is_retained_record=is_backup,
+                        is_retained_record=is_backup or is_audit,
                     )
 
         return list(resources_map.values())

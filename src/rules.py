@@ -55,10 +55,20 @@ class RulesEngine:
                     )
                 continue
 
+            # Retained Security Audit Log & Legal Hold Record
+            if (
+                res.category in ["SECURITY_AUDIT_LOG", "LEGAL_HOLD_RECORD"]
+                or "audit_record" in res.resource_id
+                or res.resource_id.startswith("legal_hold_")
+                or res.system_id in ["security_service", "legal_service"]
+            ):
+                # Policy requires retaining security audit log and legal hold records; do not flag as VIOLATION_REMAINING
+                continue
+
             # Account Tombstone
-            if res.category == "ACCOUNT_TOMBSTONE" or res.system_id == "identity_service":
+            if res.category == "ACCOUNT_TOMBSTONE" or res.system_id == "identity_service" or res.resource_id.startswith("tombstone_"):
                 # Tombstone rule: user_id permitted, but direct identifiers (email, phone, name) forbidden
-                if res.identifiers_remaining or res.state_at_audit_at == "PRESENT" and res.identifiers_remaining:
+                if res.identifiers_remaining or (res.state_at_audit_at == "PRESENT" and res.identifiers_remaining):
                     violations.append(
                         Violation(
                             violation_type="VIOLATION_PII",

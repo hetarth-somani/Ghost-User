@@ -43,31 +43,26 @@ def is_deletion_request(request_text: str) -> bool:
     if any(p in text for p in negative_patterns):
         return False
 
-    # 2. Positive filters across languages (EN, FR, ES, PT, DE, JA)
-    positive_terms = [
-        "delete",
-        "erased",
-        "erasure",
-        "close my account",
-        "remove my account",
-        "permanently deleted",
-        "personal-data deletion",
-        "suppression",
-        "supprimer",
-        "fermer mon compte",
-        "effacer",
-        "eliminar",
-        "exclusão",
-        "fechar minha conta",
-        "cancelar mi cuenta",
-        "löschen",
-        "entfernen",
-        "konto schließen",
-        "削除",
-        "消去",
-        "アカウントを閉じる",
+    # 2. Positive filters across languages using regex stems (EN, FR, ES, PT, DE, JA, KO)
+    positive_patterns = [
+        r"delet",
+        r"eras",
+        r"clos.*account",
+        r"remov.*account",
+        r"suppr",
+        r"effac",
+        r"elimin",
+        r"exclu",
+        r"fech.*conta",
+        r"cancel.*cuenta",
+        r"lösch",
+        r"entfern",
+        r"konto.*schließ",
+        r"削除",
+        r"消去",
+        r"삭제",
     ]
-    return any(t in text for t in positive_terms)
+    return any(re.search(p, text) for p in positive_patterns)
 
 
 def classify_case(request_text: str, violations: list[Violation]) -> str:

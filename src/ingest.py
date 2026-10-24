@@ -238,50 +238,154 @@ class EvidenceIngestor:
                     details=entry,
                 )
 
-        # Check for general customer_data_snapshot_bundle or connector configs
+        # Check for customer_data_snapshot_bundle format with nested "snapshots"
+        elif isinstance(data, dict) and "snapshots" in data:
+            for snap in data.get("snapshots", []):
+                data_store = snap.get("data_store", "record_system")
+                collection = snap.get("collection", "")
+                cap_time = snap.get("captured_at", captured_at)
+                for item in snap.get("records", []):
+                    res_id = item.get("resource_id", "")
+                    user_ref = item.get("subject_reference") or item.get("user_id") or item.get("customer_reference")
+                    acc_status = str(item.get("account_status", "")).upper()
+
+                    state = "PRESENT"
+                    if acc_status in ["DELETED", "ABSENT"]:
+                        state = "ABSENT" if data_store == "account_service" else "REDACTED"
+                    elif data_store == "identity_service" and not any(item.get(k) for k in ["name", "email", "phone", "email_hash"]):
+                        state = "REDACTED"
+
+                    cat = "ACCOUNT_TOMBSTONE" if data_store == "identity_service" else "SECURITY_AUDIT_LOG" if data_store == "security_service" else "USER_PROFILE"
+                    idents = {k: item[k] for k in ["email", "phone", "name"] if item.get(k)}
+                    self._insert_record(
+                        system_id=data_store,
+                        resource_id=res_id,
+                        data_category=cat,
+                        user_id=user_ref,
+                        identifiers=idents,
+                        state=state,
+                        observed_at=cap_time,
+                        evidence_id=file_id,
+                        details=item,
+                    )
+
+        # Check for general customer_data_snapshot_bundle, connector configs, or manifests
         elif isinstance(data, dict):
             for k, val in data.items():
                 if isinstance(val, list):
                     for item in val:
                         if isinstance(item, dict) and "resource_id" in item:
+                            # In connector configs / manifests, system is stored in key 'system' or 'system_id'
+                            resolved_sys = item.get("system_id") or item.get("system")
+                            res_id_val = item.get("resource_id", "")
+                            if not resolved_sys:
+                                # Derive from resource_id prefix
+                                prefix_sys_map = {
+                                    "account": "account_service",
+                                    "search": "search_service",
+                                    "support": "support_platform",
+                                    "analytics": "analytics_platform",
+                                    "export": "export_service",
+                                    "security": "security_service",
+                                    "identity": "identity_service",
+                                    "tombstone": "identity_service",
+                                    "data": "integration_service",
+                                    "backup": "backup_service",
+                                    "legal": "legal_service",
+                                    "audit": "security_service",
+                                }
+                                prefix = res_id_val.split("_")[0] if "_" in res_id_val else ""
+                                resolved_sys = prefix_sys_map.get(prefix)
+
+                            if not resolved_sys:
+                                raise ValueError(f"Unresolvable system_id for resource {res_id_val} in evidence {file_id}")
+
+                            rec_status = str(item.get("result") or item.get("status") or item.get("state") or "PRESENT").upper()
+                            state = "ABSENT" if rec_status in ["NOT_FOUND", "DELETED", "ABSENT"] else "BLOCKED" if rec_status == "BLOCKED" else "DISABLED" if rec_status == "DISABLED" else "PRESENT"
+                            if "data_flow" in res_id_val and rec_status == "ACTIVE":
+                                state = "ACTIVE"
+                            elif "backup" in res_id_val and rec_status == "ACTIVE":
+                                state = "ACTIVE"
+
+                            subj = item.get("subject_reference") or item.get("user_id") or item.get("customer_reference")
+                            idents = {k: item[k] for k in ["email", "phone"] if k in item and item[k]}
+                            if subj and "@" in str(subj):
+                                idents["email"] = str(subj)
+                                user_id_val = None
+                            else:
+                                user_id_val = subj
+
+                            obs_time = item.get("recorded_at") or item.get("timestamp") or captured_at
+                            cat_val = item.get("record_type") or "SNAPSHOT_RECORD"
+
                             self._insert_record(
-                                system_id=item.get("system_id", "record_system"),
-                                resource_id=item.get("resource_id", ""),
-                                data_category="SNAPSHOT_RECORD",
-                                user_id=item.get("user_id") or item.get("customer_reference"),
-                                identifiers={k: item[k] for k in ["email", "phone"] if k in item and item[k]},
-                                state=item.get("state", "PRESENT"),
-                                observed_at=item.get("timestamp", captured_at),
+                                system_id=resolved_sys,
+                                resource_id=res_id_val,
+                                data_category=cat_val,
+                                user_id=user_id_val,
+                                identifiers=idents,
+                                state=state,
+                                observed_at=obs_time,
                                 evidence_id=file_id,
                                 details=item,
                             )
 
     def _parse_sql_evidence(self, file_id: str, file_path: Path, captured_at: str) -> None:
-        """Extract user records and account IDs from SQL dump."""
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            content = f.read()
+        """Execute SQLite-compatible SQL snapshot script into in-memory SQLite and extract records."""
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                script = f.read()
 
-        # Extract INSERT INTO ... VALUES statements
-        pattern = re.compile(r"INSERT\s+INTO\s+`?([a-zA-Z0-9_]+)`?\s+VALUES\s*\((.*?)\);", re.IGNORECASE)
-        for match in pattern.finditer(content):
-            table = match.group(1).lower()
-            vals = [v.strip().strip("'\"") for v in match.group(2).split(",")]
-            # Heuristic mapping for account / user tables
-            if "account" in table or "customer" in table:
-                res_id = vals[0] if len(vals) > 0 else ""
-                email = next((v for v in vals if "@" in v), None)
-                user_id = next((v for v in vals if v.startswith("user_")), None)
-                self._insert_record(
-                    system_id="account_service",
-                    resource_id=res_id,
-                    data_category="USER_PROFILE",
-                    user_id=user_id,
-                    identifiers={"email": email} if email else {},
-                    state="PRESENT",
-                    observed_at=captured_at,
-                    evidence_id=file_id,
-                    details={"table": table, "values": vals},
-                )
+            mem_conn = sqlite3.connect(":memory:")
+            mem_conn.executescript(script)
+            mem_cur = mem_conn.cursor()
+
+            tables = [r[0] for r in mem_cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+            for table in tables:
+                col_info = mem_cur.execute(f"PRAGMA table_info('{table}')").fetchall()
+                col_names = [c[1].lower() for c in col_info]
+
+                rows = mem_cur.execute(f"SELECT * FROM '{table}'").fetchall()
+                for row_vals in rows:
+                    row_dict = {col_names[idx]: val for idx, val in enumerate(row_vals)}
+
+                    res_id = str(row_dict.get("resource_id") or row_dict.get("id") or "")
+                    user_id = str(row_dict.get("user_id") or row_dict.get("customer_reference") or "")
+                    email = row_dict.get("email") or row_dict.get("customer_email") or row_dict.get("owner_email")
+                    phone = row_dict.get("phone") or row_dict.get("phone_number")
+                    status_col = str(row_dict.get("account_status") or row_dict.get("status") or "PRESENT").upper()
+
+                    state = "ABSENT" if status_col in ["DELETED", "ABSENT", "REMOVED"] else "PRESENT"
+
+                    sys_id = "account_service"
+                    cat = "USER_PROFILE"
+                    if "search" in table or "search" in res_id:
+                        sys_id = "search_service"
+                        cat = "SEARCH_INDEX_ENTRY"
+                    elif "support" in table or "support" in res_id:
+                        sys_id = "support_platform"
+                        cat = "SUPPORT_MESSAGE"
+
+                    idents = {}
+                    if email:
+                        idents["email"] = str(email)
+                    if phone:
+                        idents["phone"] = str(phone)
+
+                    self._insert_record(
+                        system_id=sys_id,
+                        resource_id=res_id,
+                        data_category=cat,
+                        user_id=user_id if user_id else None,
+                        identifiers=idents,
+                        state=state,
+                        observed_at=captured_at,
+                        evidence_id=file_id,
+                        details={"table": table, "row": row_dict},
+                    )
+            mem_conn.close()
+        except Exception as e:
+            pass
 
     def _parse_log_evidence(self, file_id: str, file_path: Path, captured_at: str) -> None:
         """Parse structured logs for lookup traces and operations."""
@@ -318,7 +422,33 @@ class EvidenceIngestor:
                     )
 
     def _parse_doc_or_image_evidence(self, file_id: str, file_path: Path, captured_at: str, ext: str) -> None:
-        """Extract text from docs/images and scan for identifiers and resources."""
+        """Extract text from docs/images/txt and scan for identifiers and resources."""
+        if ext == ".txt":
+            # Parse structured handover file lines
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("-") and "|" in line:
+                        parts = [p.strip() for p in line.lstrip("-").split("|")]
+                        if len(parts) >= 6:
+                            # format: timestamp | system_id | resource_id | category | status | identifier
+                            obs_time, sys_id, res_id, cat, status_val, ident_val = parts[:6]
+                            state = "ABSENT" if status_val in ["NOT_FOUND", "DELETED", "ABSENT"] else "REDACTED" if status_val in ["REDACTED", "ANONYMIZED"] else "PRESENT"
+                            idents = {"email": ident_val} if "@" in ident_val else {}
+                            user_id = ident_val if ident_val.startswith("user_") else None
+                            self._insert_record(
+                                system_id=sys_id,
+                                resource_id=res_id,
+                                data_category=cat,
+                                user_id=user_id,
+                                identifiers=idents,
+                                state=state,
+                                observed_at=obs_time,
+                                evidence_id=file_id,
+                                details={"handover_line": line},
+                            )
+            return
+
         if ext == ".pdf":
             text = self.extractor.extract_pdf(file_path)
         else:

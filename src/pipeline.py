@@ -16,8 +16,27 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sqlite3
 import sys
 from pathlib import Path
+
+# Load environment variables from .env if present
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # Native fallback to read .env file without external package dependency
+    env_file = Path(__file__).resolve().parent.parent / ".env"
+    if env_file.exists():
+        import os
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    k, v = k.strip(), v.strip().strip("'\"")
+                    if k not in os.environ:
+                        os.environ[k] = v
 
 from src.classify import classify_case
 from src.identity import IdentityResolver
@@ -49,6 +68,18 @@ def run_pipeline(
         ingestor = EvidenceIngestor(repo_root)
         ingestor.ingest_all()
 
+    # Startup integrity guards
+    with sqlite3.connect(repo_root / "cache" / "evidence_index.sqlite") as conn:
+        rec_cnt = conn.execute("SELECT count(*) FROM records").fetchone()[0]
+    if not ingest and rec_cnt == 0:
+        raise RuntimeError("Evidence index empty; run `python -m src.ingest` first.")
+
+    with sqlite3.connect(repo_root / "cache" / "ocr_cache.sqlite") as ocr_conn:
+        ocr_cnt = ocr_conn.execute("SELECT count(*) FROM ocr_cache").fetchone()[0]
+    has_pdf_png = any(p.suffix.lower() in [".pdf", ".png"] for p in (dataset_dir / "evidence").rglob("*"))
+    if rec_cnt > 0 and ocr_cnt == 0 and has_pdf_png:
+        raise RuntimeError("OCR cache empty but PDF/PNG evidence present. Investigate src/ingest.py and src/ocr.py.")
+
     # Step 2: Initialize deterministic audit modules
     id_resolver = IdentityResolver(repo_root)
     timeline_reconstructor = TimelineReconstructor(repo_root)
@@ -58,8 +89,8 @@ def run_pipeline(
     with open(input_path, "r", encoding="utf-8") as f:
         cases = list(csv.DictReader(f))
 
-    # Sort cases deterministically by case_id
-    cases.sort(key=lambda c: c["case_id"])
+    # Sort cases deterministically by natural numerical case_id
+    cases.sort(key=lambda c: int(str(c["case_id"]).split("_")[-1]))
 
     rows: list[dict[str, str]] = []
 
@@ -118,8 +149,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Deletion Audit Pipeline")
     parser.add_argument("--sample", action="store_true", help="Run on sample_deletion_requests.csv")
     parser.add_argument("--no-ingest", action="store_true", help="Skip evidence ingestion pass")
+    parser.add_argument("--output", type=str, default="output.csv", help="Path to write output CSV")
+    parser.add_argument("--twice", action="store_true", help="Run twice to verify byte determinism")
+    parser.add_argument("--diff", action="store_true", help="Diff outputs between runs")
     args = parser.parse_args()
 
     input_file = "sample_deletion_requests.csv" if args.sample else "deletion_requests.csv"
-    out_file = "sample_output_pred.csv" if args.sample else "output.csv"
+    out_file = "sample_output_pred.csv" if args.sample else args.output
     run_pipeline(input_csv_name=input_file, output_csv_name=out_file, ingest=not args.no_ingest)

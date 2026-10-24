@@ -1,0 +1,55 @@
+# Deterministic mappings and rules overrides
+
+event_type_categories:
+  data_flow:
+    - CHECK_DATA_FLOW
+    - DISABLE_DATA_FLOW
+    - SYNC_RECORD
+  restore_risk:
+    - CHECK_RESTORE_ACCESS
+    - BLOCK_RESTORE
+    - RESTORE_BACKUP
+  record_operations:
+    - DELETE_RECORD
+    - REDACT_RECORD
+    - ANONYMIZE_RECORD
+    - RETAIN_RECORD
+    - INDEX_RECORD
+    - REFRESH_CACHE
+    - CREATE_EXPORT
+    - UPDATE_RECORD
+    - SEND_EMAIL
+    - CLASSIFY_REQUEST
+    - LINK_RESOURCE_IDENTITY
+
+system_to_default_category:
+  account_service: USER_PROFILE
+  search_service: SEARCH_INDEX_ENTRY
+  support_platform: SUPPORT_MESSAGE
+  export_service: USER_EXPORT
+  analytics_platform: ANALYTICS_PROFILE
+  integration_service: CACHE_ENTRY
+  backup_service: BACKUP_ARCHIVE
+  security_service: SECURITY_AUDIT_LOG
+  identity_service: ACCOUNT_TOMBSTONE
+  notification_service: EMAIL_DELIVERY_LOG
+  marketing_platform: MARKETING_PROFILE
+
+non_deletion_keywords:
+  - "download my account information"
+  - "portable format"
+  - "resetting the login"
+  - "misspelled"
+  - "correct it without removing"
+  - "marketing lists only"
+  - "what personal information you hold"
+  - "information request, not a request to erase"
+  - "copy of last year's invoices"
+  - "change the email address used for this account"
+  - "don't delete or change anything"
+  - "leave the account active"
+  - "not asking for deletion"
+  - "replace it with the new one and leave the account active"
+  - "stop the promotional emails"
+  - "need help resetting the login"
+  - "still want receipts and service messages"
